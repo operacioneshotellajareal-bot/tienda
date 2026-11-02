@@ -89,7 +89,7 @@ td.r,th.r{text-align:right}
 <script>
 /* ===== Datos ===== */
 const LS='tienda_ropa_v1';
-function defDB(){return {store:{nombre:'Mi Tienda',tasa:40,pass:'1234',margen:100,color:'#6a1b9a',color2:'#c2185b',logoSize:64,proxNro:1},productos:[],compras:[],ventas:[]};}
+function defDB(){return {store:{nombre:'Mi Tienda',tasa:40,pass:'1234',margen:100,color:'#6a1b9a',color2:'#c2185b',logoSize:64,proxNro:1},productos:[],compras:[],ventas:[],gastos:[]};}
 let DB=defDB();
 try{const d=JSON.parse(localStorage.getItem(LS)); if(d&&typeof d==='object'){DB=Object.assign(defDB(),d); DB.store=Object.assign(defDB().store,d.store||{});}}catch(e){}
 function save(){ try{localStorage.setItem(LS,JSON.stringify(DB));return true;}catch(e){ alert('⚠️ No se pudo guardar: el teléfono se quedó sin espacio. Suele pasar por muchas fotos pesadas. Quita alguna foto de producto e intenta de nuevo.'); return false; } }
@@ -119,7 +119,7 @@ function doLogin(){const p=document.getElementById('lg-pass').value; if(p===Stri
 function logout(){SES=false; document.getElementById('lg-pass').value=''; document.getElementById('app').classList.add('hide'); document.getElementById('login').classList.remove('hide'); pintarLogin();}
 
 /* ===== Marco ===== */
-const TABS=[['vender','🛍️ Vender'],['inventario','📦 Inventario'],['compras','📥 Compras'],['fiados','💳 Fiados'],['reportes','📊 Reportes'],['config','⚙️ Config']];
+const TABS=[['vender','🛍️ Vender'],['inventario','📦 Inventario'],['compras','📥 Compras'],['fiados','💳 Fiados'],['gastos','💸 Gastos'],['reportes','📊 Reportes'],['config','⚙️ Config']];
 function render(){
   applyTheme();
   document.getElementById('tb-nom').innerText=DB.store.nombre||'Mi Tienda';
@@ -131,6 +131,7 @@ function render(){
   else if(TAB==='inventario') v.innerHTML=viewInventario();
   else if(TAB==='compras') v.innerHTML=viewCompras();
   else if(TAB==='fiados') v.innerHTML=viewFiados();
+  else if(TAB==='gastos') v.innerHTML=viewGastos();
   else if(TAB==='reportes') v.innerHTML=viewReportes();
   else if(TAB==='config') v.innerHTML=viewConfig();
   pintarBanner();
@@ -365,6 +366,27 @@ function viewFiados(){
   return h;
 }
 
+/* ===== Gastos varios ===== */
+let gMes=mesDe(new Date().toISOString());
+function viewGastos(){
+  if(!DB.gastos)DB.gastos=[];
+  const gs=DB.gastos.filter(g=>mesDe(g.fecha)===gMes).sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));
+  const totMes=gs.reduce((s,g)=>s+num(g.monto),0);
+  let h='<div class="card"><h2>💸 Agregar gasto</h2>';
+  h+='<p class="muted" style="margin-top:-4px">Anota lo que pagas por la tienda: agua, luz, internet, alquiler, bolsas, etc.</p>';
+  h+='<div class="field"><label>¿En qué gastaste?</label><input id="g-nota" placeholder="ej: Internet del mes, agua, bolsas"></div>';
+  h+='<div class="row"><div class="field"><label>Monto ($)</label><input id="g-monto" type="number" step="0.01" placeholder="0.00"></div><div class="field"><label>Fecha</label><input id="g-fecha" type="date" value="'+hoy()+'"></div></div>';
+  h+='<button class="btn g" onclick="addGasto()">+ Agregar gasto</button></div>';
+  h+='<div class="card"><div class="row" style="align-items:flex-end;margin-bottom:6px"><div class="field" style="max-width:200px"><label>Mes</label><input type="month" value="'+esc(gMes)+'" onchange="gMes=this.value;render()"></div></div>';
+  h+='<div class="card" style="background:var(--tint);margin:0 0 10px"><div style="font-size:22px;font-weight:800;color:var(--acc)">'+usd(totMes)+'</div><div class="muted">'+bs(totMes)+' · Gastado en el mes ('+gs.length+' gasto'+(gs.length===1?'':'s')+')</div></div>';
+  if(!gs.length){h+='<div class="empty">No hay gastos en este mes.</div>';}
+  else{ gs.forEach(g=>{const d=new Date(g.fecha+'T00:00:00'); h+='<div class="lineitem" style="display:flex;justify-content:space-between;gap:8px;align-items:center"><div><b>'+esc(g.nota||'Gasto')+'</b><div class="muted">'+(isNaN(d)?esc(g.fecha):d.toLocaleDateString('es-VE'))+'</div></div><div style="display:flex;gap:10px;align-items:center"><div style="font-weight:800;color:#c62828">'+usd(g.monto)+'</div><button class="btn gh sm" onclick="borrarGasto(\''+g.id+'\')">🗑️</button></div></div>';});}
+  h+='</div>';
+  return h;
+}
+function addGasto(){ if(!DB.gastos)DB.gastos=[]; const nota=document.getElementById('g-nota').value.trim(); const monto=num(document.getElementById('g-monto').value); const fecha=document.getElementById('g-fecha').value||hoy(); if(!nota){alert('Escribe en qué gastaste');return;} if(!(monto>0)){alert('Escribe el monto del gasto');return;} DB.gastos.push({id:mid(),fecha:fecha,nota:nota,monto:monto}); gMes=mesDe(fecha); save(); render(); }
+function borrarGasto(id){ if(!confirm('¿Borrar este gasto?'))return; DB.gastos=(DB.gastos||[]).filter(g=>g.id!==id); save(); render(); }
+
 /* ===== Reportes ===== */
 let repMes=mesDe(new Date().toISOString());
 let repNro='';
@@ -399,6 +421,14 @@ function viewReportes(){
   if(!bajos.length){h+='<div class="empty">Todo con buen stock 👍</div>';}
   else{h+='<div style="overflow-x:auto"><table><tr><th>Producto</th><th>Talla</th><th>Color</th><th class="r">Stock</th></tr>'; bajos.forEach(p=>{h+='<tr><td>'+esc(p.nombre)+'</td><td>'+esc(p.talla||'-')+'</td><td>'+esc(p.color||'-')+'</td><td class="r"><span class="tag low">'+num(p.stock)+'</span></td></tr>';}); h+='</table></div>';}
   h+='</div>';
+  /* gastos del mes */
+  const gastosMes=(DB.gastos||[]).filter(g=>mesDe(g.fecha)===repMes).sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));
+  const totGastos=gastosMes.reduce((s,g)=>s+num(g.monto),0);
+  h+='<div class="card"><h2>💸 Gastos del mes</h2>';
+  h+='<div class="stats"><div class="stat" style="border-left-color:#c62828"><div class="n" style="font-size:17px;color:#c62828">'+usd(totGastos)+'</div><div class="l">Gastado</div></div><div class="stat" style="border-left-color:'+((ganMes-totGastos)>=0?'#2e7d32':'#c62828')+'"><div class="n" style="font-size:17px;color:'+((ganMes-totGastos)>=0?'#2e7d32':'#c62828')+'">'+usd(ganMes-totGastos)+'</div><div class="l">Ganancia neta (menos gastos)</div></div></div>';
+  if(!gastosMes.length){h+='<div class="empty">No registraste gastos este mes. Agrégalos en la pestaña Gastos.</div>';}
+  else{ h+='<div style="overflow-x:auto"><table><tr><th>Fecha</th><th>En qué gastó</th><th class="r">Monto</th></tr>'; gastosMes.forEach(g=>{const d=new Date(g.fecha+'T00:00:00'); h+='<tr><td>'+(isNaN(d)?esc(g.fecha):d.toLocaleDateString('es-VE'))+'</td><td>'+esc(g.nota||'-')+'</td><td class="r" style="color:#c62828">'+usd(g.monto)+'</td></tr>';}); h+='<tr class="tot" style="font-weight:700;background:#f7f7f7"><td colspan="2">TOTAL</td><td class="r">'+usd(totGastos)+'</td></tr></table></div>';}
+  h+='</div>';
   /* buscar recibo por numero de control */
   h+='<div class="card"><h2>🧾 Buscar recibo por N° de control</h2>';
   h+='<input placeholder="Escribe el número, ej. 25" value="'+esc(repNro)+'" oninput="repNro=this.value;render()">';
@@ -412,16 +442,24 @@ function imprimirReporte(){
   const sum=(arr,f)=>arr.reduce((s,v)=>s+num(f(v)),0);
   const ventaMes=sum(vts,v=>v.totalUsd), ganMes=sum(vts,v=>v.ganancia), costoMes=sum(vts,v=>v.costoTotal);
   let uds=0; vts.forEach(v=>v.items.forEach(i=>uds+=num(i.cantidad)));
+  const gastosMes=(DB.gastos||[]).filter(g=>mesDe(g.fecha)===repMes).sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));
+  const totGastos=gastosMes.reduce((s,g)=>s+num(g.monto),0);
+  const ganNeta=ganMes-totGastos;
   let c='<h2>Resumen del mes '+esc(repMes)+'</h2><div class="cards">';
   c+='<div class="cc"><div class="l">Vendido</div><div class="n">'+usd(ventaMes)+'</div><div class="l">'+bs(ventaMes)+'</div></div>';
   c+='<div class="cc"><div class="l">Costo de lo vendido</div><div class="n">'+usd(costoMes)+'</div></div>';
-  c+='<div class="cc"><div class="l">Ganancia neta</div><div class="n" style="color:#2e7d32">'+usd(ganMes)+'</div></div>';
+  c+='<div class="cc"><div class="l">Ganancia (antes de gastos)</div><div class="n" style="color:#2e7d32">'+usd(ganMes)+'</div></div>';
+  c+='<div class="cc"><div class="l">Gastos del mes</div><div class="n" style="color:#c62828">'+usd(totGastos)+'</div></div>';
+  c+='<div class="cc"><div class="l">Ganancia neta (menos gastos)</div><div class="n" style="color:'+(ganNeta>=0?'#2e7d32':'#c62828')+'">'+usd(ganNeta)+'</div></div>';
   c+='<div class="cc"><div class="l">Ventas</div><div class="n">'+vts.length+'</div><div class="l">'+uds+' prendas</div></div></div>';
   const mapa={}; vts.forEach(v=>v.items.forEach(i=>{const k=i.productoId||('x|'+i.nombre+'|'+(i.talla||'')+'|'+(i.color||'')); if(!mapa[k])mapa[k]={pid:i.productoId,n:i.nombre,t:i.talla,c:i.color,q:0,v:0,g:0,costo:num(i.costoNeto),precio:num(i.precio)}; const m=mapa[k]; m.q+=num(i.cantidad); m.v+=num(i.cantidad)*num(i.precio); m.g+=num(i.cantidad)*(num(i.precio)-num(i.costoNeto)); m.costo=num(i.costoNeto); m.precio=num(i.precio);}));
   const top=Object.values(mapa).sort((a,b)=>b.q-a.q);
   c+='<h2>Productos vendidos</h2>';
   if(!top.length){c+='<p>Sin ventas este mes.</p>';}
   else{c+='<table><tr><th>Producto</th><th>Descripción</th><th class="r">Costo real</th><th class="r">P. venta</th><th class="r">Vendidas</th><th class="r">En stock</th><th class="r">Monto</th><th class="r">Ganancia</th></tr>'; top.forEach(t=>{const pr=prodById(t.pid); const desc=pr&&pr.descripcion?pr.descripcion:''; const stk=pr?num(pr.stock):'-'; c+='<tr><td>'+esc(t.n)+' <span style="color:#777">'+esc(((t.t||'')+' '+(t.c||'')).trim())+'</span></td><td>'+esc(desc||'-')+'</td><td class="r">'+usd(t.costo)+'</td><td class="r">'+usd(t.precio)+'</td><td class="r">'+t.q+'</td><td class="r">'+stk+'</td><td class="r">'+usd(t.v)+'</td><td class="r">'+usd(t.g)+'</td></tr>';}); c+='<tr class="tot"><td colspan="4">TOTAL</td><td class="r">'+uds+'</td><td class="r"></td><td class="r">'+usd(ventaMes)+'</td><td class="r">'+usd(ganMes)+'</td></tr></table>';}
+  c+='<h2>Gastos del mes</h2>';
+  if(!gastosMes.length){c+='<p>Sin gastos este mes.</p>';}
+  else{c+='<table><tr><th>Fecha</th><th>En qué gastó</th><th class="r">Monto</th></tr>'; gastosMes.forEach(g=>{c+='<tr><td>'+esc(ymd(g.fecha))+'</td><td>'+esc(g.nota||'-')+'</td><td class="r">'+usd(g.monto)+'</td></tr>';}); c+='<tr class="tot"><td colspan="2">TOTAL GASTOS</td><td class="r">'+usd(totGastos)+'</td></tr><tr class="tot"><td colspan="2">GANANCIA NETA (menos gastos)</td><td class="r">'+usd(ganNeta)+'</td></tr></table>';}
   const bajos=DB.productos.filter(p=>num(p.stock)<=umbral()).sort((a,b)=>num(a.stock)-num(b.stock));
   c+='<h2>Poco stock (menos de '+umbral()+')</h2>';
   if(!bajos.length){c+='<p>Todo con buen stock.</p>';}
